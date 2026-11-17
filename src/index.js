@@ -6,6 +6,7 @@ const fs = require('fs')
 const path = require('path')
 const { connectDB } = require('./config/db')
 const { UPLOADS_DIR } = require('./middleware/upload')
+const { corsMiddleware } = require('./middleware/cors')
 const publicRoutes = require('./routes/public')
 const { router: authRoutes, initAdminAuth } = require('./routes/auth')
 const adminRoutes = require('./routes/admin')
@@ -17,8 +18,17 @@ const seedOnStart = require('./seed/seedOnStart')
 
 const app = express()
 const PORT = Number(process.env.PORT || 3000)
+const crossOriginFrontend =
+  Boolean(process.env.VERCEL) ||
+  Boolean((process.env.CORS_ORIGINS || '').trim()) ||
+  process.env.TRUST_CROSS_ORIGIN === 'true'
+
+if (process.env.VERCEL) {
+  app.set('trust proxy', 1)
+}
 
 app.disable('x-powered-by')
+app.use(corsMiddleware)
 app.use(helmet({ contentSecurityPolicy: false }))
 app.use(express.json({ limit: '1mb' }))
 app.use(express.urlencoded({ extended: true, limit: '1mb' }))
@@ -28,7 +38,12 @@ app.use(
     secret: process.env.SESSION_SECRET || 'development-only-change-this-session-secret-please',
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax', secure: false, maxAge: 1000 * 60 * 60 * 8 },
+    cookie: {
+      httpOnly: true,
+      sameSite: crossOriginFrontend ? 'none' : 'lax',
+      secure: crossOriginFrontend,
+      maxAge: 1000 * 60 * 60 * 8,
+    },
   })
 )
 app.use('/uploads', express.static(UPLOADS_DIR))
